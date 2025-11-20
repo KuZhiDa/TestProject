@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/sequelize';
 import { Bookings } from 'src/model/bookings.model';
 import { Events } from 'src/model/events.model';
 import { DtoData } from './dto/data.dto';
+import { selectDto } from './dto/select.dto';
+import { col, fn, literal, Sequelize } from 'sequelize';
 
 @Injectable()
 export class BookingsService {
@@ -33,5 +35,38 @@ export class BookingsService {
     });
     await this.bookingsModel.create(req);
     return { message: 'Бронь прошла успешно.' };
+  }
+
+  async getRangBooking(dto: selectDto) {
+    const where: any = {};
+    if (dto.day) {
+      where.createdAt = Sequelize.where(
+        fn('TO_CHAR', col('createdAt'), 'YYYY-MM-DD'),
+        dto.day,
+      );
+    } else if (dto.month) {
+      where.createdAt = Sequelize.where(
+        fn('TO_CHAR', col('createdAt'), 'YYYY-MM'),
+        dto.month,
+      );
+    } else if (dto.year) {
+      where.createdAt = Sequelize.where(
+        fn('TO_CHAR', col('createdAt'), 'YYYY'),
+        dto.year,
+      );
+    }
+    const result = await this.bookingsModel.findAll({
+      attributes: [
+        'user_id',
+        [literal(`RANK() OVER (ORDER BY COUNT(user_id) DESC)`), 'place'],
+        [fn('COUNT', col('user_id')), 'bookings_count'],
+      ],
+      where,
+      group: ['user_id'],
+      order: [['bookings_count', 'DESC']],
+      limit: 10,
+      raw: true,
+    });
+    return result;
   }
 }
